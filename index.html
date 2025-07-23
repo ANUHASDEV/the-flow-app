@@ -138,7 +138,7 @@
     const Echo = {
         async processCommand(prompt) {
             const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
-            const apiKey = "";
+            const apiKey = "AIzaSyBqkydrLg2xRGsuYnoiy4mtkZy_uytfgZU";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
             try {
                 const response = await fetch(apiUrl, {
