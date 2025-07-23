@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Flow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        
+        body, #command-input {
+            font-family: 'VT323', monospace;
+            background-color: #eef2f7;
+            color: #1a202c;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #e2e8f0; }
+        ::-webkit-scrollbar-thumb { background: #a0aec0; border-radius: 2px; }
+
+        #flow-feed { padding-bottom: 100px; }
+        
+        .flow-card {
+            background: white;
+            border-radius: 8px;
+            border: 2px solid #1a202c;
+            box-shadow: 4px 4px 0px #1a202c;
+            transition: all 0.2s ease-out;
+        }
+
+        #command-bar {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        
+        #command-input {
+            border-radius: 8px;
+            border: 2px solid #1a202c;
+            box-shadow: 2px 2px 0px #1a202c;
+        }
+        #command-input:focus { 
+            outline: none;
+            box-shadow: 0 0 0 3px #4f46e5, 2px 2px 0px #1a202c;
+        }
+        
+        @keyframes slideInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .new-card-animation { animation: slideInUp 0.4s ease-out forwards; }
+        
+        .focus-active {
+            border-color: #4f46e5;
+            box-shadow: 4px 4px 0px #4f46e5;
+        }
+
+        #onboarding-screen { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+        
+        .flashcard-inner { transform-style: preserve-3d; transition: transform 0.6s; }
+        .flashcard.flipped .flashcard-inner { transform: rotateY(180deg); }
+        .flashcard-front, .flashcard-back { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+        .flashcard-back { transform: rotateY(180deg); }
+        
+        @keyframes typing-dot {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+        .typing-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #4f46e5;
+            border-radius: 50%;
+            animation: typing-dot 1.4s infinite ease-in-out both;
+        }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+    </style>
+</head>
+<body class="antialiased text-lg">
+
+    <!-- Onboarding Screen -->
+    <div id="onboarding-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center text-white p-8">
+        <!-- Content will be injected by JS -->
+    </div>
+
+    <!-- Main App UI -->
+    <div id="app-ui" class="hidden">
+        <div class="max-w-xl mx-auto py-4 px-2 md:px-0">
+            <div class="flex justify-between items-center mb-4 px-2">
+                <h1 class="text-3xl font-bold text-indigo-600">THE FLOW</h1>
+                <div>
+                    <button id="help-btn" class="text-gray-500 hover:text-indigo-600 w-10 h-10 rounded-full hover:bg-gray-200 transition text-xl"><i class="fas fa-question-circle"></i></button>
+                    <button id="settings-btn" class="text-gray-500 hover:text-indigo-600 w-10 h-10 rounded-full hover:bg-gray-200 transition text-xl"><i class="fas fa-cog"></i></button>
+                </div>
+            </div>
+            <div id="flow-feed" class="space-y-6"></div>
+        </div>
+
+        <div id="command-bar" class="fixed bottom-0 left-0 right-0 p-3 border-t-2 border-gray-300">
+            <div class="max-w-xl mx-auto relative">
+                <div id="command-suggestions" class="absolute bottom-full mb-2 w-full bg-white border-2 border-black rounded-lg shadow-[4px_4px_0px_#000] p-2 hidden">
+                    <p class="font-bold mb-2">Try these commands:</p>
+                    <div class="grid grid-cols-2 gap-2 text-base">
+                        <button class="command-suggestion-btn text-left p-1 hover:bg-gray-200 rounded-md">/task Finish my report</button>
+                        <button class="command-suggestion-btn text-left p-1 hover:bg-gray-200 rounded-md">/note Idea for project</button>
+                        <button class="command-suggestion-btn text-left p-1 hover:bg-gray-200 rounded-md">/focus 30 mins on Math</button>
+                        <button class="command-suggestion-btn text-left p-1 hover:bg-gray-200 rounded-md">/analyze my week</button>
+                    </div>
+                </div>
+                <input type="text" id="command-input" class="w-full bg-white py-2 pl-10 pr-4 text-xl focus:outline-none" placeholder="Type a command...">
+                <button id="command-list-toggle" class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-indigo-600 text-2xl font-mono">/</button>
+                <button id="command-submit" class="absolute right-2 top-1/2 -translate-y-1/2 bg-indigo-600 text-white w-8 h-8 rounded-md flex items-center justify-center hover:bg-indigo-700 transition border-2 border-black">
+                    <i class="fas fa-arrow-up"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Settings Panel -->
+    <div id="settings-panel" class="fixed inset-0 bg-black/40 z-40 hidden items-center justify-center">
+        <!-- Content will be injected by JS -->
+    </div>
+
+    <script>
+    const DB = {
+        get: (key, defaultValue) => {
+            const value = localStorage.getItem(key);
+            try { return value ? JSON.parse(value) : defaultValue; } 
+            catch (e) { console.error("DB Error", e); return defaultValue; }
+        },
+        set: (key, value) => localStorage.setItem(key, JSON.stringify(value))
+    };
+
+    const Echo = {
+        async processCommand(prompt) {
+            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                const result = await response.json();
+                if (result.candidates && result.candidates.length > 0) {
+                    return result.candidates[0].content.parts[0].text;
+                }
+                throw new Error("Invalid API response.");
+            } catch (error) {
+                console.error("Echo (Gemini) Error:", error);
+                return JSON.stringify({ action: 'error', message: "I'm having trouble connecting right now." });
+            }
+        }
+    };
+
+    class FlowApp {
+        constructor() {
+            this.state = {
+                user: DB.get('user', null),
+                flowItems: DB.get('flowItems', []),
+                inQuest: false
+            };
+            this.focusTimer = null;
+            this.charts = {};
+            this.questStep = 0;
+            this.questSteps = [];
+        }
+
+        setState(newState) {
+            this.state = { ...this.state, ...newState };
+            this.render();
+            this.saveState();
+        }
+
+        init() {
+            this.attachEventListeners();
+            if (!this.state.user) {
+                this.renderOnboarding();
+            } else {
+                this.startApp();
+            }
+        }
+        
+        startApp() {
+            document.getElementById('onboarding-screen').style.display = 'none';
+            document.getElementById('app-ui').style.display = 'block';
+            if (this.state.flowItems.length === 0) {
+                this.seedInitialState();
+            }
+            this.render();
+        }
+
+        render() {
+            this.renderFeed();
+            this.renderAllCharts();
+        }
+
+        renderFeed() {
+            const feedEl = document.getElementById('flow-feed');
+            feedEl.innerHTML = '';
+            this.sortFlowItems().forEach(item => {
+                const card = this.createCardElement(item);
+                feedEl.appendChild(card);
+            });
+        }
+        
+        renderOnboarding() {
+            const screen = document.getElementById('onboarding-screen');
+            screen.innerHTML = `
+                <div class="text-center max-w-lg new-card-animation">
+                    <i class="fas fa-user-astronaut text-6xl mb-6"></i>
+                    <h1 class="text-5xl mb-4">THE FLOW</h1>
+                    <p class="text-2xl opacity-80 mb-8">Welcome, Captain. Let's get your command deck calibrated.</p>
+                    <div class="space-y-6 text-left text-xl">
+                        <div>
+                            <label for="onboarding-name" class="font-semibold">Your Callsign:</label>
+                            <input type="text" id="onboarding-name" class="w-full bg-white/20 rounded-md py-2 px-4 mt-2 focus:outline-none focus:ring-2 focus:ring-white">
+                        </div>
+                        <div>
+                            <label for="onboarding-lang" class="font-semibold">Comms Language:</label>
+                            <select id="onboarding-lang" class="w-full bg-white/20 rounded-md py-2 px-4 mt-2 focus:outline-none focus:ring-2 focus:ring-white">
+                                <option value="en">English</option><option value="si">Sinhala</option><option value="ta">Tamil</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button id="onboarding-finish" class="mt-10 bg-white text-indigo-600 font-bold py-3 px-8 rounded-md text-xl shadow-lg hover:scale-105 transition border-2 border-indigo-600">Launch</button>
+                </div>`;
+            screen.style.display = 'flex';
+            document.getElementById('onboarding-finish').addEventListener('click', () => this.finishOnboarding());
+        }
+
+        renderSettings() {
+            const panel = document.getElementById('settings-panel');
+            panel.innerHTML = `
+                <div class="flow-card p-6 w-11/12 max-w-md new-card-animation text-xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-3xl font-bold">Settings</h2>
+                        <button id="settings-close-btn" class="text-gray-400 hover:text-black text-3xl">&times;</button>
+                    </div>
+                    <div class="space-y-4">
+                        <h3 class="font-bold">Data Management</h3>
+                        <p class="text-base text-gray-600">Your data is stored only in this browser. You can back it up to a file or restore from a previous backup.</p>
+                        <div class="flex space-x-4">
+                            <button id="backup-btn" class="flex-1 bg-green-500 text-white font-bold py-2 px-4 rounded-md hover:bg-green-600 border-2 border-black">Backup</button>
+                            <button id="restore-btn" class="flex-1 bg-blue-500 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-600 border-2 border-black">Restore</button>
+                            <input type="file" id="restore-input" class="hidden" accept=".json">
+                        </div>
+                    </div>
+                </div>`;
+            panel.style.display = 'flex';
+            document.getElementById('settings-close-btn').addEventListener('click', () => this.toggleSettings(false));
+            document.getElementById('backup-btn').addEventListener('click', () => this.backupData());
+            document.getElementById('restore-btn').addEventListener('click', () => document.getElementById('restore-input').click());
+            document.getElementById('restore-input').addEventListener('change', (e) => this.restoreData(e));
+        }
+
+        startOnboardingQuest() {
+            this.questSteps = [
+                { type: 'ai_response', content: `Welcome, Captain ${this.state.user.name}! I'm Echo. Let's get your Flow calibrated. Your first command is pre-loaded in the bar below. Just hit send!` },
+                { type: 'ai_response', content: "Excellent. Let's log our first objective. Command: `/task Complete Echo Quest`" },
+                { type: 'ai_response', content: "Perfect! Tap the circle to complete the task." },
+                { type: 'ai_response', content: "Great work. Now, let's engage the focus engines for a quick 1-minute test. Command: `/focus 1 min`" },
+                { type: 'ai_response', content: "Focus engines charged. You're a natural at this." },
+                { type: 'ai_response', content: "Calibration complete. Your Flow is now live. What will you achieve today?" }
+            ];
+            this.questStep = 0;
+            this.setState({ flowItems: [this.questSteps[0]], inQuest: true });
+            document.getElementById('command-input').value = '/Initiate onboarding protocol';
+        }
+        
+        advanceQuest() {
+            if (!this.state.inQuest) return;
+            this.questStep++;
+            const nextQuestCard = this.questSteps[this.questStep];
+            if (nextQuestCard) {
+                this.addItem(nextQuestCard);
+            } else {
+                this.addItem({type: 'ai_response', content: 'Onboarding complete! Your real Flow begins now.'});
+                setTimeout(() => {
+                    this.setState({
+                        inQuest: false,
+                        flowItems: []
+                    });
+                    this.seedInitialState();
+                }, 2000);
+            }
+        }
+        
+        seedInitialState() {
+            const newItems = [
+                { id: `welcome-${Date.now()}`, type: 'ai_response', content: `Your Flow is ready, ${this.state.user.name}. Let's make today productive.`, timestamp: Date.now() },
+                { id: `task-${Date.now()}`, type: 'task', content: 'Type in the command bar to add a new task!', completed: false, timestamp: Date.now() - 1000 },
+                { id: `focus-${Date.now()}`, type: 'focus', duration: 25, active: false, tag: null, timestamp: Date.now() - 2000 },
+            ];
+            this.setState({ flowItems: newItems });
+        }
+        
+        // FIX: Added the missing sortFlowItems function
+        sortFlowItems() {
+            return this.state.flowItems.sort((a, b) => {
+                if (a.type === 'focus' && a.active) return -1;
+                if (b.type === 'focus' && b.active) return 1;
+                return b.timestamp - a.timestamp;
+            });
+        }
+        
+        createCardElement(item) {
+            const card = document.createElement('div');
+            card.className = 'flow-card p-4 text-xl';
+            card.dataset.id = item.id;
+            card.dataset.type = item.type;
+            let contentHTML = '';
+
+            switch (item.type) {
+                case 'task':
+                    card.classList.add('flex', 'items-center', 'space-x-3');
+                    contentHTML = `<button data-action="toggle" class="text-2xl ${item.completed ? 'text-green-500' : 'text-gray-300'}"><i class="fas ${item.completed ? 'fa-check-circle' : 'fa-circle'}"></i></button>
+                                   <p class="flex-grow ${item.completed ? 'line-through text-gray-400' : ''}">${item.content}</p>
+                                   <button data-action="delete" class="text-gray-400 hover:text-red-500 text-lg"><i class="fas fa-trash"></i></button>`;
+                    break;
+                case 'focus':
+                    if (item.active) card.classList.add('focus-active');
+                    contentHTML = `<div class="text-center">
+                                       <h3 class="text-2xl font-bold">Focus Block</h3>
+                                       <div class="my-2 ${item.active ? 'hidden' : ''}">
+                                           <input type="text" id="tag-${item.id}" class="w-2/3 mx-auto text-center bg-gray-100 rounded-md py-1" placeholder="Tag session (e.g., Physics)" value="${item.tag || ''}">
+                                       </div>
+                                       <p class="text-5xl font-bold text-indigo-600 my-3" id="timer-${item.id}">${item.timeLeft ? this.formatTime(item.timeLeft) : `${item.duration}:00`}</p>
+                                       <button data-action="startFocus" class="bg-indigo-600 text-white px-6 py-2 rounded-md font-bold border-2 border-black ${item.active ? 'hidden' : ''}"><i class="fas fa-play mr-2"></i>Start</button>
+                                       <button data-action="stopFocus" class="bg-red-500 text-white px-6 py-2 rounded-md font-bold border-2 border-black ${!item.active ? 'hidden' : ''}"><i class="fas fa-stop mr-2"></i>End</button>
+                                   </div>`;
+                    break;
+                case 'analytics_chart':
+                    contentHTML = `<h3 class="font-bold text-2xl mb-2 text-indigo-600">${item.title}</h3><div style="height: 250px;"><canvas id="chart-${item.id}"></canvas></div>`;
+                    break;
+                case 'ai_typing':
+                    contentHTML = `<div class="flex items-center space-x-2 text-indigo-700">
+                                       <i class="fas fa-brain"></i>
+                                       <p class="italic">Echo is typing</p>
+                                       <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+                                   </div>`;
+                    break;
+                case 'ai_response':
+                    contentHTML = `<p class="text-indigo-700 italic"><i class="fas fa-brain mr-2"></i> ${item.content}</p>`;
+                    break;
+                case 'error':
+                    contentHTML = `<p class="text-red-600"><i class="fas fa-exclamation-triangle mr-2"></i> ${item.content}</p>`;
+                    break;
+                default:
+                    contentHTML = `<p>${item.content}</p>`;
+            }
+            card.innerHTML = contentHTML;
+            return card;
+        }
+        
+        renderAllCharts() {
+            this.state.flowItems.forEach(item => {
+                if (item.type === 'analytics_chart') {
+                    if (this.charts[item.id]) this.charts[item.id].destroy();
+                    const ctx = document.getElementById(`chart-${item.id}`)?.getContext('2d');
+                    if(ctx) {
+                        Chart.defaults.font.family = "'VT323', monospace";
+                        Chart.defaults.font.size = 16;
+                        this.charts[item.id] = new Chart(ctx, item.chartConfig);
+                    }
+                }
+            });
+        }
+
+        attachEventListeners() {
+            document.getElementById('command-submit').addEventListener('click', () => this.handleCommand());
+            document.getElementById('command-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') this.handleCommand(); });
+            document.getElementById('settings-btn').addEventListener('click', () => this.toggleSettings(true));
+            document.getElementById('help-btn').addEventListener('click', () => this.startOnboardingQuest());
+            document.getElementById('command-list-toggle').addEventListener('click', () => {
+                document.getElementById('command-suggestions').classList.toggle('hidden');
+            });
+            document.querySelectorAll('.command-suggestion-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.getElementById('command-input').value = btn.textContent;
+                    document.getElementById('command-suggestions').classList.add('hidden');
+                    document.getElementById('command-input').focus();
+                });
+            });
+            document.getElementById('flow-feed').addEventListener('click', (e) => {
+                const actionTarget = e.target.closest('[data-action]');
+                if (!actionTarget) return;
+                const action = actionTarget.dataset.action;
+                const card = actionTarget.closest('.flow-card');
+                if (action === 'toggle') this.handleToggleTask(card);
+                if (action === 'delete') this.handleDeleteItem(card);
+                if (action === 'startFocus') this.handleStartFocus(card);
+                if (action === 'stopFocus') this.handleStopFocus(card);
+            });
+        }
+        
+        finishOnboarding() {
+            const name = document.getElementById('onboarding-name').value.trim();
+            const lang = document.getElementById('onboarding-lang').value;
+            if (!name) { alert('Please enter your name, Captain!'); return; }
+            this.setState({ user: { name, lang } });
+            document.getElementById('onboarding-screen').style.display = 'none';
+            this.startApp();
+            this.startOnboardingQuest();
+        }
+        
+        toggleSettings(show) {
+            const panel = document.getElementById('settings-panel');
+            if (show) {
+                this.renderSettings();
+            } else {
+                panel.style.display = 'none';
+            }
+        }
+        
+        backupData() {
+            const dataStr = JSON.stringify({ user: this.state.user, flowItems: this.state.flowItems });
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `flow_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        restoreData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.user && data.flowItems) {
+                        this.setState({ user: data.user, flowItems: data.flowItems });
+                        this.toggleSettings(false);
+                        alert('Data restored successfully!');
+                    } else { alert('Invalid backup file.'); }
+                } catch (err) { alert('Error reading backup file.'); }
+            };
+            reader.readAsText(file);
+        }
+
+        handleToggleTask = (card) => {
+            const item = this.state.flowItems.find(i => i.id === card.dataset.id);
+            if (item) {
+                const newItems = this.state.flowItems.map(i => i.id === item.id ? { ...i, completed: !i.completed, timestamp: Date.now() } : i);
+                this.setState({ flowItems: newItems });
+                if (this.state.inQuest && item.content === 'Complete Echo Quest') this.advanceQuest();
+            }
+        }
+        
+        handleDeleteItem = (card) => {
+            const newItems = this.state.flowItems.filter(i => i.id !== card.dataset.id);
+            card.style.transition = 'opacity 0.3s, transform 0.3s';
+            card.style.opacity = '0';
+            card.style.transform = 'scale(0.95)';
+            setTimeout(() => this.setState({ flowItems: newItems }), 300);
+        }
+
+        handleStartFocus = (card) => {
+            const item = this.state.flowItems.find(i => i.id === card.dataset.id);
+            const tagInput = document.getElementById(`tag-${item.id}`);
+            if (item && !this.focusTimer) {
+                const newItems = this.state.flowItems.map(i => i.id === item.id ? { ...i, active: true, tag: tagInput.value.trim() || 'Uncategorized', timeLeft: i.duration * 60 } : i);
+                this.focusTimer = setInterval(() => this.updateFocusTimer(item.id), 1000);
+                this.setState({ flowItems: newItems });
+            }
+        }
+        
+        handleStopFocus = (card) => {
+            const item = this.state.flowItems.find(i => i.id === card.dataset.id);
+            if (item && item.active) { // Check if it's active before stopping
+                const sessionCompleted = item.timeLeft <= 0;
+                clearInterval(this.focusTimer);
+                this.focusTimer = null;
+                
+                const newItems = this.state.flowItems.map(i => i.id === item.id ? { ...i, active: false, timeLeft: null, timestamp: Date.now(), completedTimestamp: sessionCompleted ? Date.now() : i.completedTimestamp } : i);
+                
+                if (sessionCompleted) {
+                    const completedItem = newItems.find(i => i.id === item.id);
+                    this.addItem({type: 'ai_response', content: `Great work! You completed a ${completedItem.duration} minute focus session on ${completedItem.tag}.`});
+                    if (this.state.inQuest) this.advanceQuest();
+                }
+                this.setState({ flowItems: newItems });
+            }
+        }
+        
+        updateFocusTimer(itemId) {
+            let itemUpdated = false;
+            const newItems = this.state.flowItems.map(item => {
+                if (item.id === itemId && item.timeLeft > 0) {
+                    itemUpdated = true;
+                    return { ...item, timeLeft: item.timeLeft - 1 };
+                }
+                return item;
+            });
+
+            if (itemUpdated) {
+                this.state.flowItems = newItems;
+                const timerEl = document.getElementById(`timer-${itemId}`);
+                if (timerEl) timerEl.textContent = this.formatTime(this.state.flowItems.find(i=>i.id === itemId).timeLeft);
+            } else {
+                const card = document.querySelector(`[data-id="${itemId}"]`);
+                if(card) this.handleStopFocus(card);
+            }
+        }
+        
+        formatTime = (seconds) => {
+            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const secs = (seconds % 60).toString().padStart(2, '0');
+            return `${mins}:${secs}`;
+        }
+
+        async handleCommand() {
+            const inputEl = document.getElementById('command-input');
+            let command = inputEl.value.trim();
+            if (!command) return;
+            if (command.startsWith('/')) command = command.substring(1);
+            inputEl.value = '';
+            
+            if (this.state.inQuest) {
+                if (command.toLowerCase().includes('task')) this.executeAIAction({action: 'add_task', content: 'Complete Echo Quest'});
+                else if (command.toLowerCase().includes('focus')) this.executeAIAction({action: 'add_focus', duration: 1});
+                else this.advanceQuest();
+                return;
+            }
+
+            const typingIndicatorId = this.addItem({ type: 'ai_typing' });
+            
+            const prompt = `You are Echo, an AI assistant for "The Flow" app. The user's name is ${this.state.user.name}. Parse the user's command: "${command}". Respond with a single, minified JSON object for the action. Actions: {"action": "add_task", "content": "..."} | {"action": "add_note", "content": "..."} | {"action": "add_goal", "content": "..."} | {"action": "add_countdown", "content": "...", "date": "YYYY-MM-DD"} | {"action": "add_flashcard", "question": "...", "answer": "..."} | {"action": "generate_analytics", "type": "weekly_tasks" | "focus_distribution"} | {"action": "error", "message": "..."}. Return ONLY the JSON.`;
+            
+            const responseJson = await Echo.processCommand(prompt);
+            
+            this.setState({ flowItems: this.state.flowItems.filter(i => i.id !== typingIndicatorId) });
+            
+            try {
+                const cleanedJsonString = responseJson.replace(/```json\n?|```/g, '').trim();
+                const response = JSON.parse(cleanedJsonString);
+                this.executeAIAction(response);
+            } catch (e) {
+                console.error("Failed to parse AI response:", e, "Original response:", responseJson);
+                this.addItem({ type: 'error', content: 'I had trouble understanding that. Could you try rephrasing?' });
+            }
+        }
+        
+        executeAIAction(response) {
+            const actions = {
+                'add_task': () => this.addItem({ type: 'task', content: response.content, completed: false }),
+                'add_note': () => this.addItem({ type: 'note', content: response.content }),
+                'add_goal': () => this.addItem({ type: 'goal', content: response.content, progress: 0 }),
+                'add_focus': () => this.addItem({ type: 'focus', duration: response.duration || 25, active: false, tag: null }),
+                'add_countdown': () => this.addItem({ type: 'countdown', content: response.content, date: response.date }),
+                'add_flashcard': () => this.addItem({ type: 'flashcard', question: response.question, answer: response.answer }),
+                'generate_analytics': () => this.generateAnalyticsCard(response.type),
+                'error': () => this.addItem({ type: 'error', content: response.message })
+            };
+            if (actions[response.action]) actions[response.action]();
+            else this.addItem({ type: 'error', content: "I'm not sure how to do that yet." });
+        }
+
+        generateAnalyticsCard(type) {
+            let chartConfig = {};
+            let title = "Analytics Snapshot";
+            if (type === 'weekly_tasks') {
+                title = "Weekly Task Completion";
+                const labels = Array.from({length: 7}, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return d.toLocaleDateString('en-US', { weekday: 'short' }); }).reverse();
+                const data = labels.map(day => this.state.flowItems.filter(item => item.type === 'task' && item.completed && new Date(item.timestamp).toLocaleDateString('en-US', { weekday: 'short' }) === day).length);
+                chartConfig = { type: 'bar', data: { labels, datasets: [{ label: 'Tasks Completed', data, backgroundColor: 'rgba(79, 70, 229, 0.8)', borderRadius: 2 }] }, options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: '#1a202c' } }, x: { ticks: { color: '#1a202c' } } } } };
+            } else if (type === 'focus_distribution') {
+                title = "Focus Session Distribution";
+                const focusData = {};
+                this.state.flowItems.filter(i => i.type === 'focus' && i.completedTimestamp).forEach(session => { focusData[session.tag] = (focusData[session.tag] || 0) + session.duration; });
+                chartConfig = { type: 'doughnut', data: { labels: Object.keys(focusData), datasets: [{ data: Object.values(focusData), backgroundColor: ['#4f46e5', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'], borderWidth: 2, borderColor: '#fff' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1a202c' } } } } };
+            }
+            this.addItem({ type: 'analytics_chart', title, chartConfig });
+        }
+        
+        addItem(itemData) {
+            const newItem = { ...itemData, id: `${itemData.type}-${Date.now()}`, timestamp: Date.now() };
+            const newItems = [newItem, ...this.state.flowItems];
+            this.setState({ flowItems: newItems });
+            return newItem.id;
+        }
+
+        saveState() {
+            DB.set('user', this.state.user);
+            DB.set('flowItems', this.state.flowItems);
+        }
+    }
+
+    let app;
+    document.addEventListener('DOMContentLoaded', () => {
+        app = new FlowApp();
+        app.init();
+    });
+    </script>
+</body>
+</html>
